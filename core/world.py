@@ -8,7 +8,7 @@ import pygame as pg
 
 from core import config as C
 from core.commands import PlayerCommand
-from sprites import Asteroid, Ship, UFO, UFO_BULLET_OWNER
+from core.entities import Asteroid, Ship, UFO, UFO_BULLET_OWNER
 from core.utils import Vec, rand_edge_pos, rand_unit_vec
 
 PlayerId = int
