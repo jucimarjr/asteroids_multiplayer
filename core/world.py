@@ -54,6 +54,10 @@ class World:
         self.wave_cool = Countdown(C.WAVE_DELAY)
         self.ufo_timer = Countdown(C.UFO_SPAWN_EVERY)
         self.extra_life_notice = Countdown()
+        # Match-end clock; reset on lobby -> running, ticked only while
+        # the match is running, latched once the match ends.
+        self.match_timer: Countdown = Countdown(0.0)
+        self.winner_id: int | None = None
 
         self.events: list[str] = []
         # Particle-spawning events recorded each tick; the server ships them
@@ -132,6 +136,9 @@ class World:
             self._maybe_start_match()
             return
 
+        if self.match_state == "ended":
+            return
+
         self._apply_commands(dt, commands_by_player_id)
 
         for ship in self.ships.values():
@@ -147,6 +154,7 @@ class World:
         self._update_timers(dt)
         self._update_respawns(dt)
         self._handle_collisions()
+        self._maybe_end_match(dt)
         self._maybe_start_next_wave(dt)
         self._purge_dead()
 
@@ -201,6 +209,24 @@ class World:
         """Move from lobby to running once enough players have connected."""
         if len(self.ships) >= C.MIN_PLAYERS_TO_START:
             self.match_state = "running"
+            self.match_timer.reset(C.MATCH_DURATION)
+            self.winner_id = None
+
+    def _maybe_end_match(self, dt: float) -> None:
+        """End the match on timer expiry or once any player hits FRAG_LIMIT."""
+        if self.match_state != "running":
+            return
+        expired = self.match_timer.tick(dt)
+        over_limit = any(v >= C.FRAG_LIMIT for v in self.frags.values())
+        if expired or over_limit:
+            self.match_state = "ended"
+            self.winner_id = self._pick_winner()
+
+    def _pick_winner(self) -> int | None:
+        """Player with the most frags wins; ties broken by smaller pid."""
+        if not self.frags:
+            return None
+        return max(self.frags.keys(), key=lambda pid: (self.frags[pid], -pid))
 
     def _update_respawns(self, dt: float) -> None:
         for pid, timer in list(self.respawning.items()):

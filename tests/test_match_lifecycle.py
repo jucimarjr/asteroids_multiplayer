@@ -1,15 +1,15 @@
-"""Tests for the match lifecycle: lobby -> running transition,
-frag counter behavior, and single-player non-regression.
-
-PR 1 covers only `lobby` -> `running`. The timer-driven transition to
-`ended` (and the winner) lands in PR 2.
+"""Tests for the match lifecycle: lobby -> running -> ended transitions,
+frag counter behavior, winner selection, and single-player non-regression.
 """
 
 from __future__ import annotations
 
 import random
 
+import pytest
+
 from core import config as C
+from core.commands import PlayerCommand
 from core.entities import Asteroid, Bullet
 from core.utils import Vec
 from core.world import World
@@ -41,8 +41,6 @@ def test_lobby_update_is_noop_for_entities():
 
 
 def test_lobby_update_ignores_player_commands():
-    from core.commands import PlayerCommand
-
     w = World(spawn_default_player=False, deathmatch=True)
     w.spawn_player(1)
     ship = w.ships[1]
@@ -106,3 +104,81 @@ def test_handle_collisions_ignores_self_bullet_frags():
     w._handle_collisions()
 
     assert w.frags[1] == 0
+
+
+def test_match_timer_resets_on_running_transition():
+    w = World(spawn_default_player=False, deathmatch=True)
+    for pid in range(1, C.MIN_PLAYERS_TO_START + 1):
+        w.spawn_player(pid)
+    assert not w.match_timer.active
+
+    w.update(0.01, {})  # lobby -> running; timer reset, not yet ticked
+
+    assert w.match_state == "running"
+    assert w.match_timer.active
+    assert w.match_timer.remaining == pytest.approx(C.MATCH_DURATION)
+
+
+def test_running_to_ended_on_frag_limit():
+    w = World(spawn_default_player=False, deathmatch=True)
+    w.spawn_player(1)
+    w.spawn_player(2)
+    w.match_state = "running"
+    w.match_timer.reset(C.MATCH_DURATION)
+    w.frags[1] = C.FRAG_LIMIT
+
+    w.update(0.01, {})
+
+    assert w.match_state == "ended"
+    assert w.winner_id == 1
+
+
+def test_running_to_ended_on_timer_expiry():
+    w = World(spawn_default_player=False, deathmatch=True)
+    w.spawn_player(1)
+    w.spawn_player(2)
+    w.match_state = "running"
+    w.match_timer.reset(0.01)
+
+    w.update(0.05, {})
+
+    assert w.match_state == "ended"
+
+
+def test_winner_id_uses_frags_pid_tiebreak():
+    w = World(spawn_default_player=False, deathmatch=True)
+    w.spawn_player(1)
+    w.spawn_player(2)
+    w.match_state = "running"
+    w.match_timer.reset(0.01)
+    w.frags = {1: 3, 2: 3}
+
+    w.update(0.05, {})
+
+    assert w.match_state == "ended"
+    assert w.winner_id == 1, "tied frags must resolve to the smaller pid"
+
+
+def test_winner_id_none_when_no_frags_and_timer_expires():
+    w = World(spawn_default_player=False, deathmatch=True)
+    w.match_state = "running"
+    w.match_timer.reset(0.01)
+    # no spawn -> empty frags dict
+
+    w.update(0.05, {})
+
+    assert w.match_state == "ended"
+    assert w.winner_id is None
+
+
+def test_ended_update_is_noop():
+    w = World(spawn_default_player=False, deathmatch=True)
+    w.spawn_player(1)
+    w.match_state = "ended"
+    ship = w.ships[1]
+    before_vel = (ship.vel.x, ship.vel.y)
+
+    w.update(0.5, {1: PlayerCommand(thrust=True)})
+
+    assert (ship.vel.x, ship.vel.y) == before_vel
+    assert w.match_state == "ended"
