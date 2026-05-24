@@ -32,7 +32,18 @@ python -m multiplayer.player --host localhost --port 8765 --name Dave  --room 1 
 python -m multiplayer.spectator --host localhost --port 8765 --room 0 --token dev-token-1 --width 1024 --height 768
 ```
 
-The server is authoritative and runs each room's `World` headlessly at 60 Hz; each client connects, receives snapshots at 30 Hz, sends input every frame (players only), and renders through the same client renderer used by single-player. The networked player client adds a local HUD with score, deaths and room id plus a scoreboard listing every connected player in the same room, with a `RESPAWN X.Xs` countdown shown next to anyone waiting to respawn.
+The server prints one line per significant event to stdout, so the terminal doubles as a live transcript of the match:
+
+```
+asteroids server listening on ws://0.0.0.0:8765
+ship spawned: Alice (pid=1, room=0)
+ship spawned: Bob (pid=2, room=0)
+match started: room=0
+ship killed: Bob (pid=2, room=0)
+match ended: room=0, winner=Alice
+```
+
+The server is authoritative and runs each room's `World` headlessly at 60 Hz; each client connects, receives snapshots at 30 Hz, sends input every frame (players only), and renders through the same client renderer used by single-player. The networked player client adds a local HUD with score, deaths and room id plus a scoreboard listing every connected player in the same room, with a `RESPAWN X.Xs` countdown shown next to anyone waiting to respawn. Audio starts **muted** on the networked client; press `R Shift` in any player window to toggle SFX on or off.
 
 A match begins as soon as two players are connected to a room (`MIN_PLAYERS_TO_START`); it ends on the first to 5 frags or after 2 minutes of clock (`FRAG_LIMIT`, `MATCH_DURATION` in `core/config.py`). Any connected player presses `ENTER` on the match-end screen to reset that room's world and start the next match. Rooms are independent — matches in room 0 do not affect room 1.
 
@@ -47,7 +58,9 @@ The spectator client is read-only: it never spawns a ship, never sends input, an
 | `↓`       | Shield (3 s active, 10 s cooldown) |
 | `Space`   | Shoot  |
 | `L Shift` | Hyperspace (costs 250 points) |
-| `Esc`     | Quit |
+| `R Shift` | Toggle audio (networked client only; muted at start) |
+| `Enter`   | Restart match after `MATCH OVER` (networked client only) |
+| `Esc` `Q` | Quit |
 
 ## How it works
 
