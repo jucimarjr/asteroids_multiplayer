@@ -61,11 +61,11 @@ class Game:
             if event.type == pg.QUIT:
                 self._quit()
 
-            if event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE:
+            if event.type == pg.KEYDOWN and event.key in (pg.K_ESCAPE, pg.K_q):
                 self._quit()
 
             if self.scene == SceneState.MENU:
-                if event.type == pg.KEYDOWN:
+                if event.type == pg.KEYDOWN and event.key == pg.K_RETURN:
                     self.scene = SceneState.PLAY
                 continue
 

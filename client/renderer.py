@@ -61,18 +61,29 @@ class Renderer:
             self.screen.blit(notice, (x, 60))
 
     def draw_menu(self) -> None:
-        self._draw_text(
-            self.big,
-            "ASTEROIDS",
-            self.config.WIDTH // 2 - 170,
-            200,
-        )
-        self._draw_text(
-            self.font,
-            "Press any key",
-            self.config.WIDTH // 2 - 170,
-            350,
-        )
+        self._draw_centered(self.big, "ASTEROIDS", 150)
+
+        self._draw_centered(self.font, "ENTER  -  START GAME", 280)
+
+        controls = [
+            ("LEFT / RIGHT", "ROTATE"),
+            ("UP", "THRUST"),
+            ("DOWN", "SHIELD"),
+            ("SPACE", "SHOOT"),
+            ("LEFT SHIFT", "HYPERSPACE"),
+        ]
+        maxkey = max(len(k) for k, _ in controls)
+        lines = [f"{k:<{maxkey}}  -  {a}" for k, a in controls]
+        labels = [self.font.render(line, True, self.config.WHITE) for line in lines]
+        widest = max(label.get_width() for label in labels)
+        x = (self.config.WIDTH - widest) // 2
+
+        y = 360
+        for label in labels:
+            self.screen.blit(label, (x, y))
+            y += 32
+
+        self._draw_centered(self.font, "Q  -  QUIT", y + 24)
 
     def draw_game_over(self) -> None:
         self._draw_text(
@@ -96,6 +107,11 @@ class Renderer:
         y: int,
     ) -> None:
         label = font.render(text, True, self.config.WHITE)
+        self.screen.blit(label, (x, y))
+
+    def _draw_centered(self, font: pg.font.Font, text: str, y: int) -> None:
+        label = font.render(text, True, self.config.WHITE)
+        x = (self.config.WIDTH - label.get_width()) // 2
         self.screen.blit(label, (x, y))
 
     def _draw_bullet(self, bullet: Bullet) -> None:
