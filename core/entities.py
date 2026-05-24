@@ -10,6 +10,10 @@ from core.commands import PlayerCommand
 from core.utils import Vec, angle_to_vec, wrap_pos
 
 PlayerId = int
+
+# Sentinel owner_id for UFO-fired bullets. Negative so it never collides with a
+# real PlayerId (which is always > 0); -10 instead of -1 leaves a buffer for
+# other non-player owners (e.g. environment, debug spawns) if they ever appear.
 UFO_BULLET_OWNER = -10
 
 
