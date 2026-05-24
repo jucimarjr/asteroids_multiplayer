@@ -106,8 +106,40 @@ class Server:
         while True:
             await asyncio.sleep(period)
             for room_id, world in self.worlds.items():
+                prev_state = world.match_state
+                prev_deaths = dict(world.deaths)
                 world.update(dt, self._inputs_for_room(room_id))
+                self._log_world_events(room_id, world, prev_state, prev_deaths)
             self.tick += 1
+
+    def _log_world_events(
+        self,
+        room_id: int,
+        world: World,
+        prev_state: str,
+        prev_deaths: dict[int, int],
+    ) -> None:
+        if prev_state != world.match_state:
+            if world.match_state == "running":
+                print(f"match started: room={room_id}", flush=True)
+            elif world.match_state == "ended":
+                print(
+                    f"match ended: room={room_id}, "
+                    f"winner={self._name_for(world.winner_id)}",
+                    flush=True,
+                )
+        for pid, n in world.deaths.items():
+            if n > prev_deaths.get(pid, 0):
+                print(
+                    f"ship killed: {self._name_for(pid)} "
+                    f"(pid={pid}, room={room_id})",
+                    flush=True,
+                )
+
+    def _name_for(self, player_id: int | None) -> str:
+        if player_id is None:
+            return "?"
+        return self._names_by_player_id.get(player_id, f"P{player_id}")
 
     def _inputs_for_room(self, room_id: int) -> dict[int, PlayerCommand]:
         return {
@@ -194,6 +226,10 @@ class Server:
             self.spectator_pids.add(player_id)
         else:
             self.worlds[room_id].spawn_player(player_id)
+            print(
+                f"ship spawned: {name} (pid={player_id}, room={room_id})",
+                flush=True,
+            )
         try:
             async for raw in ws:
                 msg = parse(raw)
