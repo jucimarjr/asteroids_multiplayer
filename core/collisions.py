@@ -35,6 +35,7 @@ class CollisionManager:
         self._ufo_vs_player_bullets(ufos, bullets, result)
         self._ufo_vs_asteroids(ufos, asteroids, result)
         self._ship_vs_asteroids(ships, asteroids, result)
+        self._ship_vs_ufos(ships, ufos, result)
         self._ship_vs_ufo_bullets(ships, bullets, result)
         return result
 
@@ -113,10 +114,31 @@ class CollisionManager:
         for ship in ships.values():
             if ship.invuln.active:
                 continue
-            for ast in asteroids:
+            for ast in list(asteroids):
                 if (ast.pos - ship.pos).length() < (ast.r + ship.r):
+                    if ship.shield.active:
+                        # Shield deflects: damage the asteroid, no score, ship survives.
+                        self._split_asteroid(ast, result=result)
+                        continue
                     result.ship_deaths.append(ship.player_id)
                     return
+
+    def _ship_vs_ufos(
+        self,
+        ships: dict[PlayerId, Ship],
+        ufos: pg.sprite.Group,
+        result: CollisionResult,
+    ) -> None:
+        """Active shield destroys any UFO that touches the ship. No score."""
+        for ship in ships.values():
+            if not ship.shield.active:
+                continue
+            for ufo in list(ufos):
+                if (ufo.pos - ship.pos).length() < (ufo.r + ship.r):
+                    ufo.kill()
+                    if ufo in ufos:
+                        ufos.remove(ufo)
+                    result.events.append("ship_explosion")
 
     def _ship_vs_ufo_bullets(
         self,
@@ -132,6 +154,8 @@ class CollisionManager:
                     continue
                 if (bullet.pos - ship.pos).length() < (bullet.r + ship.r):
                     bullet.kill()
+                    if ship.shield.active:
+                        continue
                     result.ship_deaths.append(ship.player_id)
                     return
 

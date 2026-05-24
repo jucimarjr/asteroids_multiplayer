@@ -124,6 +124,9 @@ class World:
                 ship.hyperspace(self._find_safe_hyperspace_pos(ship))
                 self.scores[player_id] = max(0, self.scores[player_id] - C.HYPERSPACE_COST)
 
+            if cmd.shield and ship.try_activate_shield():
+                self.events.append("shield_on")
+
             bullet = ship.apply_command(cmd, dt, self.bullets)
             if bullet is not None:
                 self.bullets.add(bullet)

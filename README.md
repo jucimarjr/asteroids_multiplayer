@@ -13,13 +13,14 @@ python main.py
 
 ## Controls
 
-| Key      | Action |
-| -------- | ------ |
-| `←` `→`  | Rotate |
-| `↑`      | Thrust |
-| `Space`  | Shoot  |
-| `H`      | Hyperspace (costs 250 points) |
-| `Esc`    | Quit |
+| Key       | Action |
+| --------- | ------ |
+| `←` `→`   | Rotate |
+| `↑`       | Thrust |
+| `↓`       | Shield (3 s active, 10 s cooldown) |
+| `Space`   | Shoot  |
+| `L Shift` | Hyperspace (costs 250 points) |
+| `Esc`     | Quit |
 
 ## How it works
 

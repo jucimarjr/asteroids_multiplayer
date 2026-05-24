@@ -96,6 +96,8 @@ class Ship(pg.sprite.Sprite):
         self.cool = Countdown()
         self.target_pos: Vec | None = None
         self.invuln = Countdown()
+        self.shield = Countdown()
+        self.shield_cd = Countdown()
         self.r = int(C.SHIP_RADIUS)
         self.rect = pg.Rect(0, 0, self.r * 2, self.r * 2)
 
@@ -145,9 +147,19 @@ class Ship(pg.sprite.Sprite):
         self.vel.xy = (0, 0)
         self.invuln.reset(C.SAFE_SPAWN_TIME)
 
+    def try_activate_shield(self) -> bool:
+        """Start the shield if its cooldown has elapsed. Returns True on success."""
+        if self.shield_cd.active:
+            return False
+        self.shield.reset(C.SHIELD_DURATION)
+        self.shield_cd.reset(C.SHIELD_COOLDOWN)
+        return True
+
     def update(self, dt: float) -> None:
         self.cool.tick(dt)
         self.invuln.tick(dt)
+        self.shield.tick(dt)
+        self.shield_cd.tick(dt)
 
         self.pos += self.vel * dt
         self.pos = wrap_pos(self.pos)

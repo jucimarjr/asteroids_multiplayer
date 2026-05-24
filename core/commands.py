@@ -12,3 +12,4 @@ class PlayerCommand:
     thrust: bool = False
     shoot: bool = False
     hyperspace: bool = False
+    shield: bool = False

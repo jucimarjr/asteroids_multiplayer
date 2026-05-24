@@ -128,6 +128,16 @@ class Renderer:
                 width=1,
             )
 
+        if ship.shield.active:
+            center = (int(ship.pos.x), int(ship.pos.y))
+            pg.draw.circle(
+                self.screen,
+                self.config.WHITE,
+                center,
+                ship.r + 12,
+                width=2,
+            )
+
     def _draw_ufo(self, ufo: UFO) -> None:
         width = ufo.r * 2
         height = ufo.r
