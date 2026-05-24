@@ -1,14 +1,14 @@
-"""Game systems (World, waves, score)."""
+"""Game systems (World, waves, score). No pygame here."""
+
+from __future__ import annotations
 
 import math
 from random import uniform
 
-import pygame as pg
-
 from core import config as C
 from core.collisions import CollisionManager
 from core.commands import PlayerCommand
-from core.entities import UFO, Asteroid, Particle, Ship
+from core.entities import UFO, Asteroid, Bullet, Particle, Ship
 from core.utils import Countdown, Vec, rand_edge_pos
 
 PlayerId = int
@@ -20,15 +20,16 @@ class World:
     Multiplayer-ready:
     - World receives commands indexed by player_id.
     - World generates events (strings) for the client (sounds/effects).
+    - Entities live in typed lists; dead ones (alive=False) are purged at the
+      end of each update tick.
     """
 
     def __init__(self) -> None:
         self.ships: dict[PlayerId, Ship] = {}
-        self.bullets = pg.sprite.Group()
-        self.asteroids = pg.sprite.Group()
-        self.ufos = pg.sprite.Group()
-        self.particles = pg.sprite.Group()
-        self.all_sprites = pg.sprite.Group()
+        self.bullets: list[Bullet] = []
+        self.asteroids: list[Asteroid] = []
+        self.ufos: list[UFO] = []
+        self.particles: list[Particle] = []
 
         self.scores: dict[PlayerId, int] = {}
         self.lives: dict[PlayerId, int] = {}
@@ -61,7 +62,6 @@ class World:
         self.scores[player_id] = 0
         self.lives[player_id] = C.START_LIVES
         self.extra_lives_awarded[player_id] = 0
-        self.all_sprites.add(ship)
 
     def get_ship(self, player_id: PlayerId) -> Ship | None:
         return self.ships.get(player_id)
@@ -83,18 +83,13 @@ class World:
             self.spawn_asteroid(pos, vel, "L")
 
     def spawn_asteroid(self, pos: Vec, vel: Vec, size: str) -> None:
-        ast = Asteroid(pos, vel, size)
-        self.asteroids.add(ast)
-        self.all_sprites.add(ast)
+        self.asteroids.append(Asteroid(pos, vel, size))
 
     def spawn_ufo(self) -> None:
         small = uniform(0, 1) < 0.5
         pos = rand_edge_pos()
         target = self._get_nearest_ship_pos(pos)
-        ufo = UFO(pos, small, target_pos=target)
-        self.ufos.add(ufo)
-
-        self.all_sprites.add(ufo)
+        self.ufos.append(UFO(pos, small, target_pos=target))
 
     def update(
         self,
@@ -107,12 +102,21 @@ class World:
             return
 
         self._apply_commands(dt, commands_by_player_id)
-        self.all_sprites.update(dt)
+
+        for ship in self.ships.values():
+            ship.update(dt)
+        for asteroid in self.asteroids:
+            asteroid.update(dt)
+        for bullet in self.bullets:
+            bullet.update(dt)
+        for particle in self.particles:
+            particle.update(dt)
 
         self._update_ufos(dt)
         self._update_timers(dt)
         self._handle_collisions()
         self._maybe_start_next_wave(dt)
+        self._purge_dead()
 
     def _apply_commands(
         self,
@@ -133,26 +137,22 @@ class World:
 
             bullet = ship.apply_command(cmd, dt, self.bullets)
             if bullet is not None:
-                self.bullets.add(bullet)
-                self.all_sprites.add(bullet)
+                self.bullets.append(bullet)
                 self.events.append("player_shoot")
 
     def _update_ufos(self, dt: float) -> None:
-        for ufo in list(self.ufos):
+        for ufo in self.ufos:
+            if not ufo.alive:
+                continue
             ufo.target_pos = self._get_nearest_ship_pos(ufo.pos)
             ufo.update(dt)
-            if not ufo.alive():
+            if not ufo.alive:
                 continue
 
-            ufo.target_pos = self._get_nearest_ship_pos(ufo.pos)
             bullet = ufo.try_fire()
             if bullet is not None:
-                self.bullets.add(bullet)
-                self.all_sprites.add(bullet)
+                self.bullets.append(bullet)
                 self.events.append("ufo_shoot")
-
-            if not ufo.alive():
-                self.ufos.remove(ufo)
 
     def _get_nearest_ship_pos(self, from_pos: Vec) -> Vec | None:
         """Return position of the nearest living ship to from_pos."""
@@ -232,9 +232,7 @@ class World:
             ang = uniform(0.0, math.tau)
             speed = uniform(sp_min, sp_max)
             vel = Vec(math.cos(ang), math.sin(ang)) * speed
-            p = Particle(pos, vel, ttl)
-            self.particles.add(p)
-            self.all_sprites.add(p)
+            self.particles.append(Particle(pos, vel, ttl))
 
     def _ship_die(self, ship: Ship) -> None:
         pid = ship.player_id
@@ -260,3 +258,10 @@ class World:
         self.extra_lives_awarded[player_id] = target
         self.extra_life_notice.reset(C.EXTRA_LIFE_NOTICE_TIME)
         self.events.append("extra_life")
+
+    def _purge_dead(self) -> None:
+        """Drop dead entities at the end of the tick. Keeps lists from growing."""
+        self.bullets = [b for b in self.bullets if b.alive]
+        self.asteroids = [a for a in self.asteroids if a.alive]
+        self.ufos = [u for u in self.ufos if u.alive]
+        self.particles = [p for p in self.particles if p.alive]

@@ -1,12 +1,12 @@
-"""Collision detection and resolution."""
+"""Collision detection and resolution. No pygame here."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from random import uniform
 
-import pygame as pg
-
 from core import config as C
-from core.entities import UFO_BULLET_OWNER, Asteroid, PlayerId, Ship
+from core.entities import UFO, UFO_BULLET_OWNER, Asteroid, Bullet, PlayerId, Ship
 from core.utils import Vec, rand_unit_vec
 
 
@@ -29,9 +29,9 @@ class CollisionManager:
     def resolve(
         self,
         ships: dict[PlayerId, Ship],
-        bullets: pg.sprite.Group,
-        asteroids: pg.sprite.Group,
-        ufos: pg.sprite.Group,
+        bullets: list[Bullet],
+        asteroids: list[Asteroid],
+        ufos: list[UFO],
     ) -> CollisionResult:
         result = CollisionResult()
         self._bullets_vs_asteroids(bullets, asteroids, result)
@@ -44,19 +44,26 @@ class CollisionManager:
 
     def _bullets_vs_asteroids(
         self,
-        bullets: pg.sprite.Group,
-        asteroids: pg.sprite.Group,
+        bullets: list[Bullet],
+        asteroids: list[Asteroid],
         result: CollisionResult,
     ) -> None:
-        hits = pg.sprite.groupcollide(
-            asteroids,
-            bullets,
-            False,
-            True,
-            collided=lambda a, b: (a.pos - b.pos).length() < a.r,
-        )
+        for ast in asteroids:
+            if not ast.alive:
+                continue
+            hit_bullets: list[Bullet] = []
+            for b in bullets:
+                if not b.alive:
+                    continue
+                if (ast.pos - b.pos).length() < ast.r:
+                    hit_bullets.append(b)
+            if not hit_bullets:
+                continue
 
-        for ast, hit_bullets in hits.items():
+            # Kill all bullets that hit this asteroid.
+            for b in hit_bullets:
+                b.kill()
+
             if any(b.owner_id == UFO_BULLET_OWNER for b in hit_bullets):
                 pos = Vec(ast.pos)
                 ast.kill()
@@ -68,30 +75,25 @@ class CollisionManager:
             scorer = player_bullets[0].owner_id if player_bullets else None
             self._split_asteroid(ast, scorer_id=scorer, result=result)
 
-    def _destroy_ufo(
-        self,
-        ufo: object,
-        ufos: pg.sprite.Group,
-        result: CollisionResult,
-    ) -> None:
+    def _destroy_ufo(self, ufo: UFO, result: CollisionResult) -> None:
         """Kill a UFO and emit its explosion event + particles. Helper for the
         three sites that destroy a UFO (player bullet, asteroid contact, shield)."""
         pos = Vec(ufo.pos)
         ufo.kill()
-        if ufo in ufos:
-            ufos.remove(ufo)
         result.events.append("ship_explosion")
         result.particles_to_spawn.append((pos, "ufo"))
 
     def _ufo_vs_player_bullets(
         self,
-        ufos: pg.sprite.Group,
-        bullets: pg.sprite.Group,
+        ufos: list[UFO],
+        bullets: list[Bullet],
         result: CollisionResult,
     ) -> None:
-        for ufo in list(ufos):
-            for bullet in list(bullets):
-                if bullet.owner_id <= 0:
+        for ufo in ufos:
+            if not ufo.alive:
+                continue
+            for bullet in bullets:
+                if not bullet.alive or bullet.owner_id <= 0:
                     continue
                 if (ufo.pos - bullet.pos).length() < (ufo.r + bullet.r):
                     score = C.UFO_SMALL["score"] if ufo.small else C.UFO_BIG["score"]
@@ -99,32 +101,39 @@ class CollisionManager:
                         result.score_deltas.get(bullet.owner_id, 0) + score
                     )
                     bullet.kill()
-                    self._destroy_ufo(ufo, ufos, result)
+                    self._destroy_ufo(ufo, result)
+                    break
 
     def _ufo_vs_asteroids(
         self,
-        ufos: pg.sprite.Group,
-        asteroids: pg.sprite.Group,
+        ufos: list[UFO],
+        asteroids: list[Asteroid],
         result: CollisionResult,
     ) -> None:
         """UFO collided with asteroid. UFO dies, asteroid splits without score."""
-        for ufo in list(ufos):
-            for ast in list(asteroids):
+        for ufo in ufos:
+            if not ufo.alive:
+                continue
+            for ast in asteroids:
+                if not ast.alive:
+                    continue
                 if (ufo.pos - ast.pos).length() < (ufo.r + ast.r):
-                    self._destroy_ufo(ufo, ufos, result)
+                    self._destroy_ufo(ufo, result)
                     self._split_asteroid(ast, result=result)
                     break
 
     def _ship_vs_asteroids(
         self,
         ships: dict[PlayerId, Ship],
-        asteroids: pg.sprite.Group,
+        asteroids: list[Asteroid],
         result: CollisionResult,
     ) -> None:
         for ship in ships.values():
             if ship.invuln.active:
                 continue
-            for ast in list(asteroids):
+            for ast in asteroids:
+                if not ast.alive:
+                    continue
                 if (ast.pos - ship.pos).length() < (ast.r + ship.r):
                     if ship.shield.active:
                         # Shield deflects: damage the asteroid, no score, ship survives.
@@ -136,28 +145,30 @@ class CollisionManager:
     def _ship_vs_ufos(
         self,
         ships: dict[PlayerId, Ship],
-        ufos: pg.sprite.Group,
+        ufos: list[UFO],
         result: CollisionResult,
     ) -> None:
         """Active shield destroys any UFO that touches the ship. No score."""
         for ship in ships.values():
             if not ship.shield.active:
                 continue
-            for ufo in list(ufos):
+            for ufo in ufos:
+                if not ufo.alive:
+                    continue
                 if (ufo.pos - ship.pos).length() < (ufo.r + ship.r):
-                    self._destroy_ufo(ufo, ufos, result)
+                    self._destroy_ufo(ufo, result)
 
     def _ship_vs_ufo_bullets(
         self,
         ships: dict[PlayerId, Ship],
-        bullets: pg.sprite.Group,
+        bullets: list[Bullet],
         result: CollisionResult,
     ) -> None:
         for ship in ships.values():
             if ship.invuln.active:
                 continue
-            for bullet in list(bullets):
-                if bullet.owner_id != UFO_BULLET_OWNER:
+            for bullet in bullets:
+                if not bullet.alive or bullet.owner_id != UFO_BULLET_OWNER:
                     continue
                 if (bullet.pos - ship.pos).length() < (bullet.r + ship.r):
                     bullet.kill()

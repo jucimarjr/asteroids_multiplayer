@@ -22,22 +22,21 @@ class Renderer:
         self.font = safe_fonts["font"]
         self.big = safe_fonts["big"]
 
-        self._draw_dispatch: dict[type, callable] = {
-            Bullet: self._draw_bullet,
-            Asteroid: self._draw_asteroid,
-            Ship: self._draw_ship,
-            UFO: self._draw_ufo,
-            Particle: self._draw_particle,
-        }
-
     def clear(self) -> None:
         self.screen.fill(self.config.BLACK)
 
     def draw_world(self, world: object) -> None:
-        for sprite in world.all_sprites:
-            drawer = self._draw_dispatch.get(type(sprite))
-            if drawer is not None:
-                drawer(sprite)
+        # Order matters: bottom layers drawn first.
+        for particle in world.particles:
+            self._draw_particle(particle)
+        for bullet in world.bullets:
+            self._draw_bullet(bullet)
+        for asteroid in world.asteroids:
+            self._draw_asteroid(asteroid)
+        for ufo in world.ufos:
+            self._draw_ufo(ufo)
+        for ship in world.ships.values():
+            self._draw_ship(ship)
 
     def draw_hud(
         self,

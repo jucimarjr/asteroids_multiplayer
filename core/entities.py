@@ -1,9 +1,9 @@
-"""Game entities (sprites)."""
+"""Game entities. Plain Python classes — no pygame coupling."""
+
+from __future__ import annotations
 
 import math
 from random import choice, random, uniform
-
-import pygame as pg
 
 from core import config as C
 from core.commands import PlayerCommand
@@ -24,36 +24,56 @@ def rotate_vec(v: Vec, deg: float) -> Vec:
     return Vec(v.x * c - v.y * s, v.x * s + v.y * c)
 
 
-class Particle(pg.sprite.Sprite):
+class Entity:
+    """Base for every per-frame-updated entity. Owns `alive` flag.
+
+    The World keeps entities in typed lists and purges those with alive=False
+    at the end of each tick. This replaces the previous pg.sprite.Sprite +
+    pg.sprite.Group machinery with a plain Python pattern, so core/ stays
+    framework-independent.
+    """
+
+    __slots__ = ("alive",)
+
+    def __init__(self) -> None:
+        self.alive = True
+
+    def kill(self) -> None:
+        self.alive = False
+
+
+class Particle(Entity):
     """Short-lived debris particle for explosion effects. Non-interacting.
 
     Particles don't wrap the screen — they live ~1s and travel ≤200px, so
-    wrapping would teleport stray particles to the opposite edge and look like a bug.
+    wrapping would teleport stray particles to the opposite edge and look
+    like a bug.
     """
+
+    __slots__ = ("pos", "vel", "ttl")
 
     def __init__(self, pos: Vec, vel: Vec, ttl: float) -> None:
         super().__init__()
         self.pos = Vec(pos)
         self.vel = Vec(vel)
         self.ttl = float(ttl)
-        self.rect = pg.Rect(int(pos.x), int(pos.y), 1, 1)
 
     def update(self, dt: float) -> None:
         self.pos += self.vel * dt
         self.ttl -= dt
         if self.ttl <= 0.0:
             self.kill()
-            return
-        self.rect.center = (int(self.pos.x), int(self.pos.y))
 
 
-class Bullet(pg.sprite.Sprite):
+class Bullet(Entity):
     """Generic projectile.
 
     Bullets do not wrap the screen. Their range is bounded by TTL, so wrapping
     would let a shot fired at one edge instantly reappear on the opposite side
     and hit something the player never aimed at.
     """
+
+    __slots__ = ("owner_id", "pos", "vel", "ttl", "r")
 
     def __init__(
         self,
@@ -68,19 +88,18 @@ class Bullet(pg.sprite.Sprite):
         self.vel = Vec(vel)
         self.ttl = float(ttl)
         self.r = int(C.BULLET_RADIUS)
-        self.rect = pg.Rect(0, 0, self.r * 2, self.r * 2)
 
     def update(self, dt: float) -> None:
         self.pos += self.vel * dt
         self.ttl -= dt
         if self.ttl <= 0.0:
             self.kill()
-            return
-        self.rect.center = (int(self.pos.x), int(self.pos.y))
 
 
-class Asteroid(pg.sprite.Sprite):
+class Asteroid(Entity):
     """Asteroid with irregular polygon shape."""
+
+    __slots__ = ("pos", "vel", "size", "r", "poly")
 
     def __init__(self, pos: Vec, vel: Vec, size: str) -> None:
         super().__init__()
@@ -89,7 +108,6 @@ class Asteroid(pg.sprite.Sprite):
         self.size = size
         self.r = int(C.AST_SIZES[size]["r"])
         self.poly = self._make_poly()
-        self.rect = pg.Rect(0, 0, self.r * 2, self.r * 2)
 
     def _make_poly(self) -> list[Vec]:
         steps = C.AST_POLY_STEPS[self.size]
@@ -108,11 +126,23 @@ class Asteroid(pg.sprite.Sprite):
     def update(self, dt: float) -> None:
         self.pos += self.vel * dt
         self.pos = wrap_pos(self.pos)
-        self.rect.center = (int(self.pos.x), int(self.pos.y))
 
 
-class Ship(pg.sprite.Sprite):
+class Ship(Entity):
     """Ship controlled by command (does not read keyboard)."""
+
+    __slots__ = (
+        "player_id",
+        "pos",
+        "vel",
+        "angle",
+        "cool",
+        "target_pos",
+        "invuln",
+        "shield",
+        "shield_cd",
+        "r",
+    )
 
     def __init__(self, player_id: PlayerId, pos: Vec) -> None:
         super().__init__()
@@ -126,14 +156,13 @@ class Ship(pg.sprite.Sprite):
         self.shield = Countdown()
         self.shield_cd = Countdown()
         self.r = int(C.SHIP_RADIUS)
-        self.rect = pg.Rect(0, 0, self.r * 2, self.r * 2)
 
     def apply_command(
         self,
         cmd: PlayerCommand,
         dt: float,
-        bullets: pg.sprite.Group,
-    ) -> "Bullet | None":
+        bullets: list[Bullet],
+    ) -> Bullet | None:
         if cmd.rotate_left and not cmd.rotate_right:
             self.angle -= C.SHIP_TURN_SPEED * dt
         elif cmd.rotate_right and not cmd.rotate_left:
@@ -149,15 +178,11 @@ class Ship(pg.sprite.Sprite):
 
         return None
 
-    def _try_fire(self, bullets: pg.sprite.Group) -> "Bullet | None":
+    def _try_fire(self, bullets: list[Bullet]) -> Bullet | None:
         if self.cool.active:
             return None
 
-        count = 0
-        for bullet in bullets:
-            if bullet.owner_id == self.player_id:
-                count += 1
-
+        count = sum(1 for b in bullets if b.owner_id == self.player_id)
         if count >= C.MAX_BULLETS_PER_PLAYER:
             return None
 
@@ -190,7 +215,6 @@ class Ship(pg.sprite.Sprite):
 
         self.pos += self.vel * dt
         self.pos = wrap_pos(self.pos)
-        self.rect.center = (int(self.pos.x), int(self.pos.y))
 
     def ship_points(self) -> tuple[Vec, Vec, Vec]:
         """Return the 3 vertices of the ship triangle."""
@@ -204,8 +228,10 @@ class Ship(pg.sprite.Sprite):
         return p1, p2, p3
 
 
-class UFO(pg.sprite.Sprite):
+class UFO(Entity):
     """UFO with two movement behaviors and shooting."""
+
+    __slots__ = ("small", "r", "pos", "vel", "speed", "cool", "move_dir", "target_pos")
 
     def __init__(
         self,
@@ -230,7 +256,6 @@ class UFO(pg.sprite.Sprite):
             self._lock_small_move_dir(target_pos)
 
         self._setup_crossing_if_needed()
-        self.rect = pg.Rect(0, 0, self.r * 2, self.r * 2)
 
     def _lock_small_move_dir(self, target_pos: Vec | None) -> None:
         if target_pos is None:
@@ -293,8 +318,6 @@ class UFO(pg.sprite.Sprite):
         else:
             self._update_cross(dt)
 
-        self.rect.center = (int(self.pos.x), int(self.pos.y))
-
     def _update_pursue(self, dt: float) -> None:
         if self.move_dir is not None:
             self.vel = self.move_dir * self.speed
@@ -313,7 +336,7 @@ class UFO(pg.sprite.Sprite):
         if out_x or out_y:
             self.kill()
 
-    def try_fire(self) -> "Bullet | None":
+    def try_fire(self) -> Bullet | None:
         if self.cool.active:
             return None
 
