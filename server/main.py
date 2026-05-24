@@ -57,6 +57,9 @@ class Server:
         # 30 Hz client still drives a 60 Hz simulation smoothly; the slot
         # is cleared when the player disconnects.
         self._inputs_by_player_id: dict[int, PlayerCommand] = {}
+        # Display names from the HELLO handshake, forwarded into every
+        # snapshot so each client can render a scoreboard.
+        self._names_by_player_id: dict[int, str] = {}
 
         self.world = World(spawn_default_player=False, deathmatch=True)
 
@@ -82,7 +85,7 @@ class Server:
     async def _broadcast_snapshot(self) -> None:
         if not self.connections:
             return
-        snap = world_to_snapshot(self.world)
+        snap = world_to_snapshot(self.world, names=self._names_by_player_id)
         for player_id, ws in list(self.connections.items()):
             seq = self._seq_by_player_id.get(player_id, 0)
             self._seq_by_player_id[player_id] = seq + 1
@@ -92,11 +95,13 @@ class Server:
                 await ws.send(envelope(SNAPSHOT, self.tick, seq, snap))
 
     async def _handle_connection(self, ws: Any) -> None:
-        player_id = await self._handshake(ws)
-        if player_id is None:
+        result = await self._handshake(ws)
+        if result is None:
             return
+        player_id, name = result
 
         self.connections[player_id] = ws
+        self._names_by_player_id[player_id] = name
         self.world.spawn_player(player_id)
         try:
             async for raw in ws:
@@ -109,6 +114,7 @@ class Server:
             self.connections.pop(player_id, None)
             self._seq_by_player_id.pop(player_id, None)
             self._inputs_by_player_id.pop(player_id, None)
+            self._names_by_player_id.pop(player_id, None)
             self.world.ships.pop(player_id, None)
             self.world.scores.pop(player_id, None)
             self.world.lives.pop(player_id, None)
@@ -116,7 +122,7 @@ class Server:
             self.world.respawning.pop(player_id, None)
             self.world.extra_lives_awarded.pop(player_id, None)
 
-    async def _handshake(self, ws: Any) -> int | None:
+    async def _handshake(self, ws: Any) -> tuple[int, str] | None:
         try:
             raw = await asyncio.wait_for(ws.recv(), timeout=HANDSHAKE_TIMEOUT)
         except TimeoutError:
@@ -138,8 +144,13 @@ class Server:
         player_id = self._next_player_id
         self._next_player_id += 1
 
+        raw_name = msg["data"].get("name", "")
+        name = (raw_name if isinstance(raw_name, str) else "").strip()[:16]
+        if not name:
+            name = f"P{player_id}"
+
         await ws.send(envelope(WELCOME, self.tick, 0, {"player_id": player_id}))
-        return player_id
+        return player_id, name
 
 
 def main() -> None:

@@ -41,6 +41,10 @@ class World:
         self.deaths: dict[PlayerId, int] = {}
         self.respawning: dict[PlayerId, Countdown] = {}
         self.extra_lives_awarded: dict[PlayerId, int] = {}
+        # Display names of connected players, keyed by player_id. Populated
+        # by the server from the HELLO payload and ferried through the
+        # snapshot; single-player keeps this empty.
+        self.names: dict[PlayerId, str] = {}
         self.wave = 0
         self.wave_cool = Countdown(C.WAVE_DELAY)
         self.ufo_timer = Countdown(C.UFO_SPAWN_EVERY)

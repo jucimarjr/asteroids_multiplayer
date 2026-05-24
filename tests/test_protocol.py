@@ -85,6 +85,7 @@ def test_world_to_snapshot_has_required_keys():
         "deaths",
         "respawning",
         "events",
+        "names",
         "wave",
         "game_over",
     }
@@ -202,3 +203,13 @@ def test_event_constant_removed_from_protocol():
     """The EVENT message type was dropped in favor of an `events` field
     inside the SNAPSHOT payload. Guard against the constant creeping back."""
     assert not hasattr(protocol, "EVENT")
+
+
+def test_snapshot_includes_names_when_provided():
+    snap = world_to_snapshot(World(), names={1: "Alice", 2: "Bob"})
+    assert snap["names"] == {"1": "Alice", "2": "Bob"}
+
+
+def test_snapshot_names_empty_when_not_provided():
+    snap = world_to_snapshot(World())
+    assert snap["names"] == {}

@@ -17,6 +17,7 @@ EMPTY_SNAPSHOT = {
     "deaths": {},
     "respawning": [],
     "events": [],
+    "names": {},
     "wave": 0,
     "game_over": False,
 }
@@ -215,3 +216,9 @@ def test_snapshot_to_world_omits_respawning_when_field_missing():
     del snap["respawning"]
     snapshot_to_world(snap, w)
     assert w.respawning == {}
+
+
+def test_snapshot_to_world_preserves_names():
+    w = World(spawn_default_player=False)
+    snapshot_to_world(_snapshot(names={"1": "Alice", "2": "Bob"}), w)
+    assert w.names == {1: "Alice", 2: "Bob"}

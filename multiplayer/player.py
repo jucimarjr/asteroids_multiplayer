@@ -27,9 +27,9 @@ from client.camera import Camera
 from client.controls import InputMapper
 from client.renderer import Renderer
 from core import config as C
-from core.scene import SceneState
 from core.world import World
 from multiplayer.command_codec import command_to_dict
+from multiplayer.hud import draw_local_hud, draw_scoreboard
 from multiplayer.snapshot import snapshot_to_world
 from server.protocol import (
     HELLO,
@@ -160,9 +160,8 @@ class Player:
 
         self.renderer.draw_world(self.world)
 
-        score = self.world.scores.get(self.player_id, 0) if self.player_id is not None else 0
-        lives = self.world.lives.get(self.player_id, 0) if self.player_id is not None else 0
-        self.renderer.draw_hud(score, lives, self.world.wave, SceneState.PLAY)
+        draw_local_hud(self.screen, self.font, self.world, self.player_id, C.WHITE)
+        draw_scoreboard(self.screen, self.font, self.world, self.player_id, C.WHITE)
 
         pg.display.flip()
 

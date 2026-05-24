@@ -62,7 +62,10 @@ def parse(raw: str | bytes) -> dict[str, Any] | None:
     return msg
 
 
-def world_to_snapshot(world: World) -> dict[str, Any]:
+def world_to_snapshot(
+    world: World,
+    names: dict[int, str] | None = None,
+) -> dict[str, Any]:
     """Serialize a World into a JSON-safe dict for the SNAPSHOT message.
 
     Particles themselves are excluded on purpose: they are short-lived
@@ -75,6 +78,10 @@ def world_to_snapshot(world: World) -> dict[str, Any]:
     it from (size, position) when reconstructing the world. Polygon jitter
     will differ from the server, but the shape stays consistent with the
     asteroid's size class.
+
+    ``names`` is the server-side mapping of player_id to display name. Tests
+    that build snapshots straight from a `World` can omit it; the live
+    server always passes its tracked dict.
     """
     return {
         "ships": [
@@ -128,6 +135,7 @@ def world_to_snapshot(world: World) -> dict[str, Any]:
             {"player_id": pid, "remaining": cd.remaining} for pid, cd in world.respawning.items()
         ],
         "events": [{"kind": kind, "x": pos.x, "y": pos.y} for kind, pos in world.particle_events],
+        "names": {str(pid): name for pid, name in (names or {}).items()},
         "wave": world.wave,
         "game_over": world.game_over,
     }

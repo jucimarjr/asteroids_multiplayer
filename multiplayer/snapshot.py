@@ -40,6 +40,7 @@ def snapshot_to_world(snap: dict[str, Any], world: World) -> None:
         int(entry["player_id"]): Countdown(entry["remaining"])
         for entry in snap.get("respawning", [])
     }
+    world.names = {int(pid): name for pid, name in snap.get("names", {}).items()}
     world.wave = snap["wave"]
     world.game_over = snap["game_over"]
 
