@@ -43,20 +43,40 @@ def build_world(ships: int, asteroids: int) -> World:
     return world
 
 
-def run(ticks: int, ships: int, asteroids: int) -> None:
-    """Drive `ticks` updates against a synthetic world.
+def build_rooms(
+    rooms: int,
+    ships_per_room: int,
+    asteroids_per_room: int,
+) -> dict[int, World]:
+    """Mirror Server.worlds — `rooms` independent worlds each loaded
+    like `build_world(ships_per_room, asteroids_per_room)`."""
+    return {
+        room_id: build_world(ships_per_room, asteroids_per_room)
+        for room_id in range(rooms)
+    }
 
-    Every spawned player issues `thrust=True, shoot=True` on every
-    frame, which loads the bullet path and the collision loop with
-    plenty of work.
+
+def run(ticks: int, ships: int, asteroids: int, rooms: int = 1) -> None:
+    """Drive `ticks` updates across `rooms` synthetic worlds.
+
+    Total ships and asteroids are split evenly across rooms, so the
+    workload is comparable across `--rooms` values when the
+    `--ships`/`--asteroids` totals stay constant. Every spawned
+    player issues `thrust=True, shoot=True` on every frame.
     """
     seed(42)  # deterministic asteroid placement and velocities
-    world = build_world(ships, asteroids)
+    ships_per_room = max(1, ships // rooms)
+    asteroids_per_room = max(0, asteroids // rooms)
+    worlds = build_rooms(rooms, ships_per_room, asteroids_per_room)
     cmd = PlayerCommand(thrust=True, shoot=True)
-    inputs = {pid: cmd for pid in world.ships}
+    inputs_per_world = {
+        room_id: {pid: cmd for pid in world.ships}
+        for room_id, world in worlds.items()
+    }
     dt = 1.0 / C.FPS
     for _ in range(ticks):
-        world.update(dt, inputs)
+        for room_id, world in worlds.items():
+            world.update(dt, inputs_per_world[room_id])
 
 
 def main() -> None:
@@ -67,6 +87,16 @@ def main() -> None:
     parser.add_argument("--ticks", type=int, default=600)
     parser.add_argument("--ships", type=int, default=8)
     parser.add_argument("--asteroids", type=int, default=30)
+    parser.add_argument(
+        "--rooms",
+        type=int,
+        default=1,
+        help=(
+            "number of concurrent worlds (Server.worlds) — "
+            "ships and asteroids are split evenly across rooms "
+            "(default: 1)"
+        ),
+    )
     parser.add_argument(
         "--top",
         type=int,
@@ -82,7 +112,7 @@ def main() -> None:
 
     profiler = cProfile.Profile()
     profiler.enable()
-    run(args.ticks, args.ships, args.asteroids)
+    run(args.ticks, args.ships, args.asteroids, rooms=args.rooms)
     profiler.disable()
 
     stats = pstats.Stats(profiler).sort_stats("cumulative")

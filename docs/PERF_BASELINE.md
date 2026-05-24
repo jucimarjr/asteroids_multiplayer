@@ -124,3 +124,68 @@ Append rows here as future phases re-measure:
 | Date | Branch / phase | Tick mean | Snapshot bytes | Decision |
 |------|----------------|----------:|---------------:|----------|
 | 2026-05-24 | post-F4, post-PEP-8 (`33de4dc`) | 0.85 ms | 8 359 | baseline; no optimization activated |
+| 2026-05-24 | post-F5 (`6322f5a`) | 0.81 ms (1 room) → 0.30 ms (8 rooms) | unchanged | F5 multi-room **reduces** tick cost when load is split; no optimization activated |
+
+## 7. F5 multi-room measurement
+
+Re-run after F5 closes the roadmap, against the same synthetic
+load (`600 ticks`, `8 ships` and `30 asteroids` **total**, split
+evenly across `--rooms` so the room composition shrinks as the
+count grows).
+
+### Method
+
+```
+python scripts/profile_tick.py --ticks 600 --ships 8 --asteroids 30 --rooms 1
+python scripts/profile_tick.py --ticks 600 --ships 8 --asteroids 30 --rooms 2
+python scripts/profile_tick.py --ticks 600 --ships 8 --asteroids 30 --rooms 4
+python scripts/profile_tick.py --ticks 600 --ships 8 --asteroids 30 --rooms 8
+```
+
+The script mirrors `Server._tick_loop`: each iteration loops over
+the `rooms` worlds and calls `world.update(dt, inputs_for_room)`
+once per room. The total wall time is the cost of advancing **all
+rooms** by one tick.
+
+### Numbers (MacBook Air M2, Python 3.13, single thread)
+
+| Rooms | Ships / room | Asteroids / room | Total `run` time | Mean tick total |
+|------:|-------------:|-----------------:|-----------------:|----------------:|
+|     1 |            8 |               30 |          0.484 s |         0.807 ms |
+|     2 |            4 |               15 |          0.290 s |         0.483 ms |
+|     4 |            2 |                7 |          0.235 s |         0.392 ms |
+|     8 |            1 |                3 |          0.179 s |         0.298 ms |
+
+Top hotspot in every run: `_bullets_vs_asteroids` inside
+`CollisionManager.resolve`. The cumulative time of that call drops
+linearly with the per-room ship count because the inner loop is
+O(ships × asteroids); splitting the same load across more rooms
+shrinks the dominant `O(N²)` term inside each room without
+introducing meaningful overhead between rooms.
+
+### Hotspot analysis vs. threshold
+
+Threshold from §5 unchanged: optimize when one hotspot consumes
+≥ 10 % of one tick **and** the total tick exceeds 50 % of the
+60 Hz frame budget (16.67 ms).
+
+| Configuration                | Tick mean | % of 60 Hz budget | Decision |
+|------------------------------|----------:|------------------:|----------|
+| 1 room × 8 ships             | 0.81 ms   |             4.8 % | **skip** — well below threshold; equivalent to F4 baseline |
+| 2 rooms × 4 ships            | 0.48 ms   |             2.9 % | **skip** |
+| 4 rooms × 2 ships            | 0.39 ms   |             2.3 % | **skip** |
+| 8 rooms × 1 ship             | 0.30 ms   |             1.8 % | **skip** |
+
+**Decision**: F5 multi-room does not trigger any optimization. The
+counter-intuitive result is the right outcome: splitting load
+across rooms is cheaper than concentrating it because the dominant
+cost in `_handle_collisions` scales super-linearly with the per-room
+ship and asteroid counts.
+
+### When would this revisit?
+
+The number to watch is **ships per room**, not rooms total. If a
+future build raises `MAX_PLAYERS` above 8 or if `WAVE_BASE_COUNT`
+grows past ~30 asteroids per room, the per-room cost climbs as
+`O(ships × asteroids)` and the threshold can flip. Re-run this
+section before changing either constant.

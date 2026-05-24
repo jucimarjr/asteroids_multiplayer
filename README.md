@@ -16,17 +16,27 @@ python main.py
 ### Run multiplayer deathmatch
 
 ```
-# Terminal 1
-python -m server --port 8765
+# Terminal 0 — copy the example token file first
+cp tokens.example.txt tokens.txt
 
-# Terminals 2 and 3 (one client per player)
-python -m multiplayer.player --host localhost --port 8765 --name Alice
-python -m multiplayer.player --host localhost --port 8765 --name Bob
+# Terminal 1 — server with two rooms
+python -m server --rooms 2 --port 8765
+
+# Terminals 2-5 — players in two rooms
+python -m multiplayer.player --host localhost --port 8765 --name Alice --room 0 --token dev-token-1
+python -m multiplayer.player --host localhost --port 8765 --name Bob   --room 0 --token dev-token-2
+python -m multiplayer.player --host localhost --port 8765 --name Carol --room 1 --token dev-token-3
+python -m multiplayer.player --host localhost --port 8765 --name Dave  --room 1 --token dev-token-4
+
+# Terminal 6 — spectator on room 0
+python -m multiplayer.spectator --host localhost --port 8765 --room 0 --token dev-token-1 --width 1024 --height 768
 ```
 
-The server is authoritative and runs the `World` headlessly at 60 Hz; each client connects, receives snapshots at 30 Hz, sends input every frame, and renders through the same client renderer used by single-player. The networked client adds a local HUD with score and deaths plus a scoreboard listing every connected player, ordered by score, with a `RESPAWN X.Xs` countdown shown next to anyone waiting to respawn.
+The server is authoritative and runs each room's `World` headlessly at 60 Hz; each client connects, receives snapshots at 30 Hz, sends input every frame (players only), and renders through the same client renderer used by single-player. The networked player client adds a local HUD with score, deaths and room id plus a scoreboard listing every connected player in the same room, with a `RESPAWN X.Xs` countdown shown next to anyone waiting to respawn.
 
-A match begins as soon as two players are connected (`MIN_PLAYERS_TO_START`); it ends on the first to 5 frags or after 2 minutes of clock (`FRAG_LIMIT`, `MATCH_DURATION` in `core/config.py`). Any connected player presses `ENTER` on the match-end screen to reset the world and start the next match.
+A match begins as soon as two players are connected to a room (`MIN_PLAYERS_TO_START`); it ends on the first to 5 frags or after 2 minutes of clock (`FRAG_LIMIT`, `MATCH_DURATION` in `core/config.py`). Any connected player presses `ENTER` on the match-end screen to reset that room's world and start the next match. Rooms are independent — matches in room 0 do not affect room 1.
+
+The spectator client is read-only: it never spawns a ship, never sends input, and fits the entire 3840×2160 world into the configured `--width`/`--height` window via the `SpectatorCamera` (letterbox padding when the aspect ratio differs from the world's 16:9). Set `--rooms N` on the server to host N concurrent rooms; the default is 1, which matches the F4 single-room behavior.
 
 ## Controls
 
@@ -54,11 +64,14 @@ See [`docs/teaching/`](docs/teaching/) for the lecture material that walks throu
 
 Key files:
 
-- [`core/world.py`](core/world.py): simulation tick, wave spawning, score, lives, deathmatch flag, respawn loop.
+- [`core/world.py`](core/world.py): simulation tick, wave spawning, score, lives, deathmatch flag, respawn loop, match lifecycle.
 - [`core/entities.py`](core/entities.py): `Ship`, `Asteroid`, `Bullet`, `UFO`, `Particle`.
 - [`core/collisions.py`](core/collisions.py): `CollisionManager` resolves every collision in a single pass and returns a `CollisionResult`.
 - [`client/game.py`](client/game.py): game loop and scene transitions (menu, play, game over).
-- [`multiplayer/hud.py`](multiplayer/hud.py): networked-client HUD and 1-room scoreboard.
+- [`client/spectator_camera.py`](client/spectator_camera.py): scaled fit-the-world-into-the-window camera used by the spectator client.
+- [`multiplayer/hud.py`](multiplayer/hud.py): networked-client HUD and scoreboard.
+- [`multiplayer/spectator.py`](multiplayer/spectator.py): read-only spectator client.
+- [`server/auth.py`](server/auth.py): token allowlist loader.
 
 ## Roadmap
 
@@ -68,7 +81,7 @@ Key files:
 | F2 — Server lonely | WebSocket asyncio server, single player connects and sees own state | done |
 | F3 — Multi-player 1 room | N players in deathmatch, respawn, frag/score, scoreboard HUD | done |
 | F4 — Match lifecycle | Timer / frag limit / match end, ENTER-to-restart, lobby gate | done |
-| F5 — Multi-room | Token-based rooms, parallel matches, per-room logs | planned |
+| F5 — Multi-room | Token allowlist, N concurrent rooms, dedicated spectator client | done |
 
 ## Project layout
 
