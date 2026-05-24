@@ -1,0 +1,8 @@
+# Example token allowlist. Copy this file to `tokens.txt` (gitignored)
+# and edit the values before running the server. The server reads the
+# file once at boot — one token per line, `#` comments and blank lines
+# are ignored.
+dev-token-1
+dev-token-2
+dev-token-3
+dev-token-4

@@ -52,8 +52,11 @@ class FakeWebSocket:
         return self._incoming.popleft()
 
 
+VALID_TOKEN = "t"
+
+
 def _hello(name: str = "alice", **data: Any) -> str:
-    payload = {"name": name, **data}
+    payload = {"name": name, "token": VALID_TOKEN, **data}
     return json.dumps({"type": "hello", "tick": 0, "seq": 0, "data": payload})
 
 
@@ -66,7 +69,7 @@ def _last_reject_reason(ws: FakeWebSocket) -> str | None:
 
 
 def test_server_creates_n_worlds_on_boot():
-    server = Server("127.0.0.1", 0, rooms=3)
+    server = Server("127.0.0.1", 0, allowed_tokens={VALID_TOKEN}, rooms=3)
     assert set(server.worlds.keys()) == {0, 1, 2}
     for world in server.worlds.values():
         assert world.deathmatch is True
@@ -75,11 +78,11 @@ def test_server_creates_n_worlds_on_boot():
 
 def test_server_rejects_zero_or_negative_rooms():
     with pytest.raises(ValueError):
-        Server("127.0.0.1", 0, rooms=0)
+        Server("127.0.0.1", 0, allowed_tokens={VALID_TOKEN}, rooms=0)
 
 
 def test_inputs_for_room_filters_by_room_id():
-    server = Server("127.0.0.1", 0, rooms=2)
+    server = Server("127.0.0.1", 0, allowed_tokens={VALID_TOKEN}, rooms=2)
     cmd_a = PlayerCommand(thrust=True)
     cmd_b = PlayerCommand(shoot=True)
     server._inputs_by_player_id = {1: cmd_a, 2: cmd_b, 3: cmd_a}
@@ -90,14 +93,14 @@ def test_inputs_for_room_filters_by_room_id():
 
 
 def test_pids_in_room_returns_only_matching_players():
-    server = Server("127.0.0.1", 0, rooms=2)
+    server = Server("127.0.0.1", 0, allowed_tokens={VALID_TOKEN}, rooms=2)
     server.room_by_player_id = {1: 0, 2: 1, 3: 0, 4: 1}
     assert sorted(server._pids_in_room(0)) == [1, 3]
     assert sorted(server._pids_in_room(1)) == [2, 4]
 
 
 def test_handshake_accepts_valid_room_id():
-    server = Server("127.0.0.1", 0, rooms=2)
+    server = Server("127.0.0.1", 0, allowed_tokens={VALID_TOKEN}, rooms=2)
     ws = FakeWebSocket([_hello(name="alice", room_id=1)])
 
     result = asyncio.run(server._handshake(ws))
@@ -113,7 +116,7 @@ def test_handshake_accepts_valid_room_id():
 
 def test_handshake_defaults_room_id_to_zero_when_missing():
     """Pre-F5 clients omit room_id; server falls back to room 0."""
-    server = Server("127.0.0.1", 0, rooms=1)
+    server = Server("127.0.0.1", 0, allowed_tokens={VALID_TOKEN}, rooms=1)
     ws = FakeWebSocket([_hello(name="legacy")])
 
     result = asyncio.run(server._handshake(ws))
@@ -124,7 +127,7 @@ def test_handshake_defaults_room_id_to_zero_when_missing():
 
 
 def test_handshake_rejects_invalid_room_id():
-    server = Server("127.0.0.1", 0, rooms=2)
+    server = Server("127.0.0.1", 0, allowed_tokens={VALID_TOKEN}, rooms=2)
     ws = FakeWebSocket([_hello(name="x", room_id=99)])
 
     result = asyncio.run(server._handshake(ws))
@@ -135,7 +138,7 @@ def test_handshake_rejects_invalid_room_id():
 
 
 def test_handshake_rejects_non_int_room_id():
-    server = Server("127.0.0.1", 0, rooms=2)
+    server = Server("127.0.0.1", 0, allowed_tokens={VALID_TOKEN}, rooms=2)
     ws = FakeWebSocket([_hello(name="x", room_id="zero")])
 
     result = asyncio.run(server._handshake(ws))
@@ -146,9 +149,14 @@ def test_handshake_rejects_non_int_room_id():
 
 def test_handshake_rejects_bool_as_room_id():
     """A JSON `true` is `int` in Python; explicit guard keeps it out."""
-    server = Server("127.0.0.1", 0, rooms=2)
-    raw = (
-        '{"type":"hello","tick":0,"seq":0,"data":{"name":"x","room_id":true}}'
+    server = Server("127.0.0.1", 0, allowed_tokens={VALID_TOKEN}, rooms=2)
+    raw = json.dumps(
+        {
+            "type": "hello",
+            "tick": 0,
+            "seq": 0,
+            "data": {"name": "x", "token": VALID_TOKEN, "room_id": True},
+        }
     )
     ws = FakeWebSocket([raw])
 
@@ -159,7 +167,7 @@ def test_handshake_rejects_bool_as_room_id():
 
 
 def test_handshake_rejects_when_room_is_full():
-    server = Server("127.0.0.1", 0, rooms=2)
+    server = Server("127.0.0.1", 0, allowed_tokens={VALID_TOKEN}, rooms=2)
     # Saturate room 0.
     server.room_by_player_id = {pid: 0 for pid in range(1, C.MAX_PLAYERS + 1)}
     ws = FakeWebSocket([_hello(name="x", room_id=0)])
@@ -172,7 +180,7 @@ def test_handshake_rejects_when_room_is_full():
 
 def test_handshake_accepts_when_target_room_has_space():
     """Room 0 is full but room 1 should still accept."""
-    server = Server("127.0.0.1", 0, rooms=2)
+    server = Server("127.0.0.1", 0, allowed_tokens={VALID_TOKEN}, rooms=2)
     server.room_by_player_id = {pid: 0 for pid in range(1, C.MAX_PLAYERS + 1)}
     ws = FakeWebSocket([_hello(name="x", room_id=1)])
 
@@ -185,7 +193,7 @@ def test_handshake_accepts_when_target_room_has_space():
 
 def test_despawn_only_touches_correct_room():
     """Disconnect cleanup must not leak across rooms."""
-    server = Server("127.0.0.1", 0, rooms=2)
+    server = Server("127.0.0.1", 0, allowed_tokens={VALID_TOKEN}, rooms=2)
     server.worlds[0].spawn_player(1)
     server.worlds[1].spawn_player(2)
     server.room_by_player_id[1] = 0
@@ -201,7 +209,7 @@ def test_despawn_only_touches_correct_room():
 
 
 def test_restart_request_only_resets_owning_room():
-    server = Server("127.0.0.1", 0, rooms=2)
+    server = Server("127.0.0.1", 0, allowed_tokens={VALID_TOKEN}, rooms=2)
     # Both rooms reach `ended`.
     for room_id, world in server.worlds.items():
         world.spawn_player(10 + room_id)
@@ -219,7 +227,7 @@ def test_restart_request_only_resets_owning_room():
 
 
 def test_restart_request_noop_when_match_not_ended():
-    server = Server("127.0.0.1", 0, rooms=1)
+    server = Server("127.0.0.1", 0, allowed_tokens={VALID_TOKEN}, rooms=1)
     server.worlds[0].spawn_player(1)
     server.room_by_player_id[1] = 0
     # match_state is "lobby" right after spawn_player
@@ -231,7 +239,7 @@ def test_restart_request_noop_when_match_not_ended():
 
 def test_restart_request_noop_for_unknown_player():
     """Idempotent — unknown pid (e.g. ghost connection) is a no-op."""
-    server = Server("127.0.0.1", 0, rooms=1)
+    server = Server("127.0.0.1", 0, allowed_tokens={VALID_TOKEN}, rooms=1)
     server._handle_restart_request(999)
     # nothing raised, no state mutated
     assert server.worlds[0].match_state == "lobby"

@@ -14,6 +14,7 @@ import asyncio
 import contextlib
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 import websockets
@@ -22,6 +23,7 @@ from core import config as C
 from core.commands import PlayerCommand
 from core.world import World
 from multiplayer.command_codec import dict_to_command
+from server.auth import load_tokens
 from server.protocol import (
     HELLO,
     INPUT,
@@ -50,13 +52,17 @@ class Server:
         self,
         host: str,
         port: int,
+        allowed_tokens: set[str],
         rooms: int = C.DEFAULT_ROOMS,
         profile_broadcast: bool = False,
     ) -> None:
         if rooms < 1:
             raise ValueError(f"rooms must be >= 1, got {rooms}")
+        if not allowed_tokens:
+            raise ValueError("allowed_tokens must not be empty")
         self.host = host
         self.port = port
+        self.allowed_tokens = allowed_tokens
         self.profile_broadcast = profile_broadcast
         self.tick = 0
         # The websocket connection type differs slightly between websockets
@@ -225,6 +231,11 @@ class Server:
             await ws.close()
             return None
 
+        token = msg["data"].get("token", "")
+        if not isinstance(token, str) or token not in self.allowed_tokens:
+            await self._reject_and_close(ws, "unauthorized")
+            return None
+
         room_id = msg["data"].get("room_id", 0)
         if not isinstance(room_id, int) or isinstance(room_id, bool):
             await self._reject_and_close(ws, "invalid_room")
@@ -273,15 +284,28 @@ def main() -> None:
         help=f"number of concurrent rooms (default: {C.DEFAULT_ROOMS})",
     )
     parser.add_argument(
+        "--tokens-file",
+        default="tokens.txt",
+        type=Path,
+        help="path to token allowlist file (default: tokens.txt)",
+    )
+    parser.add_argument(
         "--profile-broadcast",
         action="store_true",
         help="log ms and bytes per broadcast to stderr",
     )
     args = parser.parse_args()
 
+    try:
+        allowed_tokens = load_tokens(args.tokens_file)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"failed to load tokens: {exc}", file=sys.stderr)
+        sys.exit(2)
+
     server = Server(
         args.host,
         args.port,
+        allowed_tokens=allowed_tokens,
         rooms=args.rooms,
         profile_broadcast=args.profile_broadcast,
     )

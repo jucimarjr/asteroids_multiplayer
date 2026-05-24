@@ -12,6 +12,9 @@ env/
 # Environment files
 .env
 
+# Server token allowlist (operator copies tokens.example.txt to tokens.txt)
+tokens.txt
+
 # macOS
 .DS_Store
 
