@@ -26,6 +26,8 @@ python -m multiplayer.player --host localhost --port 8765 --name Bob
 
 The server is authoritative and runs the `World` headlessly at 60 Hz; each client connects, receives snapshots at 30 Hz, sends input every frame, and renders through the same client renderer used by single-player. The networked client adds a local HUD with score and deaths plus a scoreboard listing every connected player, ordered by score, with a `RESPAWN X.Xs` countdown shown next to anyone waiting to respawn.
 
+A match begins as soon as two players are connected (`MIN_PLAYERS_TO_START`); it ends on the first to 5 frags or after 2 minutes of clock (`FRAG_LIMIT`, `MATCH_DURATION` in `core/config.py`). Any connected player presses `ENTER` on the match-end screen to reset the world and start the next match.
+
 ## Controls
 
 | Key       | Action |
@@ -65,7 +67,7 @@ Key files:
 | F1 — Foundation | Decouple `core/` from pygame, viewport vs world split, camera, testing infra | done |
 | F2 — Server lonely | WebSocket asyncio server, single player connects and sees own state | done |
 | F3 — Multi-player 1 room | N players in deathmatch, respawn, frag/score, scoreboard HUD | done |
-| F4 — Match lifecycle | Timer / frag limit / match end, spectator client | planned |
+| F4 — Match lifecycle | Timer / frag limit / match end, ENTER-to-restart, lobby gate | done |
 | F5 — Multi-room | Token-based rooms, parallel matches, per-room logs | planned |
 
 ## Project layout
