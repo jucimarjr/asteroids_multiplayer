@@ -148,8 +148,10 @@ class World:
         target = self._get_nearest_ship_pos(pos)
         self.ufos.append(UFO(pos, small, target_pos=target))
 
-    def update_local_visual(self, dt: float) -> None:
-        """Smooth non-ship motion between authoritative snapshots.
+    def update_local_visual(
+        self, dt: float, local_player_id: PlayerId | None = None
+    ) -> None:
+        """Smooth motion between authoritative snapshots for rendering.
 
         The networked client never runs the authoritative `update` —
         snapshots arrive at SNAPSHOT_HZ and overwrite every entity list.
@@ -157,7 +159,16 @@ class World:
         ttl locally (particles are not transmitted; the client spawns
         them from events and must age them out itself, otherwise they
         accumulate forever).
+
+        Remote ships are dead-reckoned by their velocity too, so other
+        players stop stuttering between 30 Hz snapshots. The local ship
+        is skipped: the client predicts it from input instead (passing
+        `local_player_id`). With no id given, every ship advances.
         """
+        for pid, s in self.ships.items():
+            if pid == local_player_id:
+                continue
+            s.pos = wrap_pos(s.pos + s.vel * dt)
         for a in self.asteroids:
             a.pos = wrap_pos(a.pos + a.vel * dt)
         for b in self.bullets:

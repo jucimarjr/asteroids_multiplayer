@@ -205,7 +205,7 @@ class Player:
                 self.running = False
                 break
 
-            self.world.update_local_visual(dt)
+            self.world.update_local_visual(dt, local_player_id=self.player_id)
             self.audio.update_thrust(cmd.thrust)
             self.audio.update_ufo_siren(list(self.world.ufos))
             self.audio.play_events(self.world.events)

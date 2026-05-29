@@ -5,7 +5,8 @@ frame; it must move non-ship entities and let particle ttl decay
 without otherwise touching simulation state.
 """
 
-from core.entities import Bullet, Particle
+from core import config as C
+from core.entities import Bullet, Particle, Ship
 from core.utils import Vec
 from core.world import World
 
@@ -50,6 +51,40 @@ def test_purges_dead_particles():
 
     assert len(w.particles) == 1
     assert w.particles[0].ttl == 1.5
+
+
+def test_advances_remote_ship_and_skips_local():
+    w = World(spawn_default_player=False)
+    w.ships[1] = Ship(1, Vec(100, 100))
+    w.ships[1].vel = Vec(50, 0)
+    w.ships[2] = Ship(2, Vec(200, 200))
+    w.ships[2].vel = Vec(0, 40)
+
+    w.update_local_visual(0.5, local_player_id=1)
+
+    assert (w.ships[1].pos.x, w.ships[1].pos.y) == (100, 100)
+    assert (w.ships[2].pos.x, w.ships[2].pos.y) == (200, 220)
+
+
+def test_remote_ship_wraps_toroidally():
+    w = World(spawn_default_player=False)
+    w.ships[2] = Ship(2, Vec(C.WORLD_WIDTH - 10, 50))
+    w.ships[2].vel = Vec(40, 0)
+
+    w.update_local_visual(0.5, local_player_id=1)
+
+    # 3830 + 40 * 0.5 = 3850 -> wraps back to 10.
+    assert w.ships[2].pos.x == 10
+
+
+def test_no_local_id_advances_all_ships():
+    w = World(spawn_default_player=False)
+    w.ships[1] = Ship(1, Vec(0, 0))
+    w.ships[1].vel = Vec(10, 10)
+
+    w.update_local_visual(1.0)
+
+    assert (w.ships[1].pos.x, w.ships[1].pos.y) == (10, 10)
 
 
 def test_does_not_touch_match_state_or_scores():
