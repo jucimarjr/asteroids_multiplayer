@@ -28,6 +28,7 @@ from client.spectator_camera import SpectatorCamera
 from core import config as C
 from core.world import World
 from multiplayer.hud import draw_match_end_screen, draw_scoreboard
+from multiplayer.net import ws_uri
 from multiplayer.snapshot import snapshot_to_world
 from server.protocol import (
     HELLO,
@@ -50,6 +51,7 @@ class Spectator:
         token: str,
         window_width: int,
         window_height: int,
+        tls: bool = False,
     ) -> None:
         self.host = host
         self.port = port
@@ -57,6 +59,7 @@ class Spectator:
         self.token = token
         self.window_width = window_width
         self.window_height = window_height
+        self.tls = tls
         self.server_tick = 0
         self.running = True
 
@@ -76,7 +79,7 @@ class Spectator:
         )
 
     async def run(self) -> None:
-        uri = f"ws://{self.host}:{self.port}"
+        uri = ws_uri(self.host, self.port, tls=self.tls)
         try:
             async with websockets.connect(uri) as ws:
                 if not await self._handshake(ws):
@@ -206,9 +209,14 @@ def main() -> None:
     )
     parser.add_argument(
         "--port",
-        default=8765,
+        default=None,
         type=int,
-        help="server port (default: 8765)",
+        help="server port (default: 8765, or 443 with --tls)",
+    )
+    parser.add_argument(
+        "--tls",
+        action="store_true",
+        help="connect over wss:// (TLS), e.g. via a 443 reverse proxy",
     )
     parser.add_argument(
         "--room",
@@ -234,14 +242,16 @@ def main() -> None:
         help="window height in pixels (default: 720)",
     )
     args = parser.parse_args()
+    port = args.port if args.port is not None else (443 if args.tls else 8765)
 
     spectator = Spectator(
         args.host,
-        args.port,
+        port,
         args.room,
         args.token,
         args.width,
         args.height,
+        tls=args.tls,
     )
     try:
         asyncio.run(spectator.run())

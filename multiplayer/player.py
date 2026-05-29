@@ -39,6 +39,7 @@ from multiplayer.hud import (
     draw_scoreboard,
     draw_waiting_screen,
 )
+from multiplayer.net import ws_uri
 from multiplayer.snapshot import snapshot_to_world
 from server.protocol import (
     HELLO,
@@ -62,12 +63,14 @@ class Player:
         name: str,
         room: int,
         token: str,
+        tls: bool = False,
     ) -> None:
         self.host = host
         self.port = port
         self.name = name
         self.room = room
         self.token = token
+        self.tls = tls
         self.player_id: int | None = None
         self.server_tick = 0
         self.seq = 0
@@ -100,7 +103,7 @@ class Player:
         self.audio.set_muted(True)
 
     async def run(self) -> None:
-        uri = f"ws://{self.host}:{self.port}"
+        uri = ws_uri(self.host, self.port, tls=self.tls)
         try:
             async with websockets.connect(uri) as ws:
                 if not await self._handshake(ws):
@@ -273,7 +276,15 @@ def main() -> None:
         "--host", default="localhost", help="server host (default: localhost)"
     )
     parser.add_argument(
-        "--port", default=8765, type=int, help="server port (default: 8765)"
+        "--port",
+        type=int,
+        default=None,
+        help="server port (default: 8765, or 443 with --tls)",
+    )
+    parser.add_argument(
+        "--tls",
+        action="store_true",
+        help="connect over wss:// (TLS), e.g. via a 443 reverse proxy",
     )
     parser.add_argument(
         "--name", default="player", help="display name (default: player)"
@@ -290,8 +301,11 @@ def main() -> None:
         help="allowlist token issued by the server operator",
     )
     args = parser.parse_args()
+    port = args.port if args.port is not None else (443 if args.tls else 8765)
 
-    player = Player(args.host, args.port, args.name, args.room, args.token)
+    player = Player(
+        args.host, port, args.name, args.room, args.token, tls=args.tls
+    )
     try:
         asyncio.run(player.run())
     except KeyboardInterrupt:
