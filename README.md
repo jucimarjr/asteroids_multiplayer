@@ -95,6 +95,7 @@ Key files:
 | F3 — Multi-player 1 room | N players in deathmatch, respawn, frag/score, scoreboard HUD | done |
 | F4 — Match lifecycle | Timer / frag limit / match end, ENTER-to-restart, lobby gate | done |
 | F5 — Multi-room | Token allowlist, N concurrent rooms, dedicated spectator client | done |
+| F6 — Netcode | Client-side prediction, server reconciliation (input ack), remote-ship interpolation | done |
 
 ## Project layout
 
