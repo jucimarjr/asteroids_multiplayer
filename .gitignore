@@ -32,6 +32,10 @@ dist/
 CLAUDE.md
 demo-sala-de-aula.txt
 docs/teaching/
+# c4-figma skill, authored locally — not part of the game/student repo
+docs/c4-config.json
+docs/c4-figma-skill-lessons.md
+docs/c4-figma-skill-v2/
 
 # Optional: ignore large audio files
 # assets/sounds/*.wav
