@@ -66,11 +66,9 @@ asteroids_multiplayer/
 │   └── sounds/              # WAV effects used by the pygame clients
 └── docs/
     ├── ARCHITECTURE.md
-    ├── CODE_REVIEW.md
     ├── COMO_JOGAR.md        # player guide (PT-BR)
     ├── DEPLOY.md            # VPS / systemd deployment guide
-    ├── DEVELOPMENT_WORKFLOW.md
-    └── PERF_BASELINE.md
+    └── DEVELOPMENT_WORKFLOW.md
 ```
 
 Audio files in `assets/sounds/`: `player_shoot.wav`,
@@ -260,7 +258,7 @@ One WebSocket per client. Every message is a JSON envelope:
 
 The snapshot is **full state**, not a delta — chosen for legibility over
 wire size at this stage. Coordinates are rounded to one decimal to cut
-bytes. See `server/protocol.py` and `docs/PERF_BASELINE.md`.
+bytes. See `server/protocol.py`.
 
 ## 7. Netcode Model
 
@@ -293,9 +291,9 @@ fixed delay to remote ships.
 - `scripts/profile_tick.py` profiles `World.update` under cProfile;
   `scripts/server_health.py` probes a running server (sends a HELLO,
   expects a reply) and exits 0/1.
-- `docs/PERF_BASELINE.md` records the measured tick budget and the
-  rationale (per the project's "optimize only with measurement" rule)
-  for why no CPU hotspot has justified optimization.
+- Performance work follows the project's "optimize only with
+  measurement" rule: profile first, and only optimize a hotspot that
+  measurement shows is worth it.
 
 ## 9. Lineage
 
